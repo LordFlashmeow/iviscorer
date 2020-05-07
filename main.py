@@ -1,14 +1,14 @@
+import sys
 from typing import Dict
 
 import auraxium
 
-# character_id = 5428990295196282625
-character_name = ""
-
-# Query user for username if none is specified in the script
-
-if len(character_name) == 0:
+# Query user for username if none is specified in the command line
+if len(sys.argv) == 1:
     character_name = input("Enter a character name: ")
+
+else:
+    character_name = sys.argv[1]
 
 
 class PlayerClass:
@@ -58,7 +58,6 @@ class PlayerClass:
 
             return id
 
-
     def __contains__(self, item):
         """Returns if the profile id matches the item"""
         if item == self.profile_id:
@@ -73,8 +72,7 @@ class PlayerClass:
             self.class_name, self.shots_fired, self.hits, self.kills, self.headshots)
 
 
-character_id_query = auraxium.Query('character_name', namespace='ps2',name__first_lower=character_name.lower())
-
+character_id_query = auraxium.Query('character_name', namespace='ps2', name__first_lower=character_name.lower())
 
 character_id_results = character_id_query.get()
 
