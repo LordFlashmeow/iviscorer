@@ -3,7 +3,13 @@ from typing import Dict
 import auraxium
 
 # character_id = 5428990295196282625
-character_name = "Wrel"
+character_name = ""
+
+# Query user for username if none is specified in the script
+
+if len(character_name) == 0:
+    character_name = input("Enter a character name: ")
+
 
 class PlayerClass:
     profile_id_dict = {1: 'Infiltrator', 3: 'Light Assault', 4: 'Medic', 5: 'Engineer',
