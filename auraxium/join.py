@@ -1,5 +1,7 @@
 from typing import Tuple, Union
-from .census import List, Term
+
+from .census import List
+from .census import SearchModifier, Term
 from .log import logger
 from .type import CensusValue
 
@@ -26,8 +28,30 @@ class Join():
         self.show = show
         self.hide = hide
         # Additional kwargs are passed on to the `add_term` method
+        # self._terms: List[Term] = []
+        # _ = [Term(k.replace('__', '.'), kwargs[k]) for k in kwargs.keys()]
+
         self._terms: List[Term] = []
-        _ = [Term(k.replace('__', '.'), kwargs[k]) for k in kwargs.keys()]
+        _ = [self.add_term(k.replace('__', '.'), kwargs[k]) for k in kwargs]
+
+    def add_term(self, field: str, value: CensusValue,
+                 modifier: SearchModifier = SearchModifier.EQUAL_TO) -> 'Join':
+        """Add a search term to this query.
+
+        Any results returned by a query must meet every term defined
+        for it.
+        """
+
+        # Current code doesn't detect comparisons in terms, so I have to search for it manually
+
+        if isinstance(value, str):
+            if '<' in value:
+                modifier = SearchModifier.LESS_THAN
+                value = value.replace('<', '')
+
+        new_term = Term(field, value, modifier)
+        self._terms.append(new_term)
+        return self
 
     def set_hide(self, *args: Union[str, List[str]]) -> 'Join':
         """Hide the given field names from the response."""
