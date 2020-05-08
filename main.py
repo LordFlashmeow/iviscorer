@@ -1,5 +1,6 @@
 import sys
 from typing import Dict
+from datetime import datetime
 
 import auraxium
 
@@ -16,12 +17,15 @@ class PlayerClass:
                        6: 'Heavy Assault',
                        7: 'MAX'}
 
-    def __init__(self, loadout_id=0, profile_id=0, kills=0, headshots=0, hits=0, shots_fired=0):
+    def __init__(self, loadout_id=0, profile_id=0, kills=0, headshots=0, hits=0, hits_forever=0, shots_fired=0,
+                 shots_fired_forever=0):
         self.loadout_id = loadout_id
         self.kills = kills
         self.headshots = headshots
         self.hits = hits
+        self.hits_forever = hits_forever
         self.shots_fired = shots_fired
+        self.shots_fired_forever = shots_fired_forever
         self.profile_id = profile_id
 
         self.class_name = self.generate_class_name()
@@ -90,7 +94,8 @@ class_stats: Dict[int, PlayerClass] = {}
 # item^on:attacker_weapon_id^to:item_id^terms:item_type_id=26'item_category_id=<100^outer:0^show:name.en
 recent_kills = auraxium.Query('characters_event', namespace='ps2', character_id=character_id, limit=500,
                               type="KILL")
-recent_kills.join('item', on='attacker_weapon_id', to='item_id', terms=("item_type_id=26", "item_category_id=<100"),
+recent_kills.join('item', on='attacker_weapon_id', to='item_id', item_type_id=26, attacker_vehicle_id=0,
+                  item_category_id='<100',
                   is_outer=False, show=['name.en'])
 
 loadouts = {15: 'Infiltrator', 17: 'Light Assault', 18: 'Medic', 19: 'Engineer', 20: 'Heavy Assault', 21: 'MAX'}
@@ -123,19 +128,26 @@ for stat in class_accuracy[0]['stats']:  # TODO pick item more intelligently, ma
     if stat['stat_name'] == 'hit_count':
         if profile_id in class_stats:
             class_stats[profile_id].hits = stat['value_' + timeframe]
+            class_stats[profile_id].hits_forever = stat['value_forever']
 
         else:
-            class_stats[profile_id] = PlayerClass(profile_id=profile_id, hits=stat['value_' + timeframe])
+            class_stats[profile_id] = PlayerClass(profile_id=profile_id, hits=stat['value_' + timeframe], hits_forever=stat['value_forever'])
 
     if stat['stat_name'] == 'fire_count':
         if profile_id in class_stats:
             class_stats[profile_id].shots_fired = stat['value_' + timeframe]
+            class_stats[profile_id].shots_fired_forever = stat['value_forever']
+
 
         else:
-            class_stats[profile_id] = PlayerClass(profile_id=profile_id, shots_fired=stat['value_' + timeframe])
+            class_stats[profile_id] = PlayerClass(profile_id=profile_id, shots_fired=stat['value_' + timeframe], shots_fired_forever=stat['value_forever'])
 
 for kill in recent_kills_result:
     profile_id = PlayerClass.loadout_to_profile_id(kill['attacker_loadout_id'])
+
+    # Skip any vehicle kills that sneak through
+    if kill['attacker_vehicle_id'] != 0:
+        continue
 
     if kill['is_headshot'] == 1:
         class_stats[profile_id].headshots += 1
@@ -148,16 +160,20 @@ total_kills = 0
 total_headshots = 0
 
 print("Player: ", character_id_results[0]['name']['first'])
+print("Kills since: ", datetime.utcfromtimestamp(oldest_kill).strftime('%Y-%m-%d %H:%M'))
 
+
+# Generate weekly/monthly stats
 for profile_id, class_data in class_stats.items():
     try:
+        # Do these first, so that the stats don't get added if there were no shots in the timeframe
+        accuracy = (class_data.hits / class_data.shots_fired) * 100
+        hsr = (class_data.headshots / class_data.kills) * 100
+
         total_shots_fired += class_data.shots_fired
         total_hits += class_data.hits
         total_kills += class_data.kills
         total_headshots += class_data.headshots
-
-        accuracy = (class_data.hits / class_data.shots_fired) * 100
-        hsr = (class_data.headshots / class_data.kills) * 100
 
         ivi = accuracy * hsr
         if ivi == 0:
@@ -168,5 +184,33 @@ for profile_id, class_data in class_stats.items():
     except ZeroDivisionError:
         continue
 
-print("Your overall %s IvI is: %d" % (
+print("Your overall %s accuracy IvI is: %d" % (
     timeframe, (total_hits / total_shots_fired) * (total_headshots / total_kills) * 10000))
+
+# Generate forever stats
+if timeframe != 'forever':
+
+    print('\nStats using all-time accuracy data')
+
+    total_shots_fired = 0
+    total_hits = 0
+
+    for profile_id, class_data in class_stats.items():
+        try:
+            total_shots_fired += class_data.shots_fired_forever
+            total_hits += class_data.hits_forever
+
+            accuracy = (class_data.hits_forever / class_data.shots_fired_forever) * 100
+            hsr = (class_data.headshots / class_data.kills) * 100
+
+            ivi = accuracy * hsr
+            if ivi == 0:
+                continue
+
+            print("Class: %s - IvI: %d - ACC: %f - HSR: %f - HS: %d Kill: %d" % (
+                class_data.class_name, accuracy * hsr, accuracy, hsr, class_data.headshots, class_data.kills))
+        except ZeroDivisionError:
+            continue
+
+    print("Your overall forever accuracy IvI is: %d" % (
+        (total_hits / total_shots_fired) * (total_headshots / total_kills) * 10000))
